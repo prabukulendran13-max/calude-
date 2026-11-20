@@ -49,40 +49,66 @@ def interior_area(U):
     return int(cnt.sum())
 
 @torch.no_grad()
-def lama_fill(img, hole):
-    h, w = hole.shape
-    H8, W8 = -(-h//8)*8, -(-w//8)*8
-    im = np.pad(np.transpose(img, (2, 0, 1)), ((0, 0), (0, H8-h), (0, W8-w)), mode='symmetric')
-    mk = np.pad(hole.astype(np.float32)[None], ((0, 0), (0, H8-h), (0, W8-w)), mode='symmetric')
-    o = lama(torch.from_numpy(im)[None].float(), torch.from_numpy(mk)[None])
-    return o[0, :, :h, :w].clamp(0, 1).permute(1, 2, 0).numpy()
+def lama_fill(img, hole, margin=112, minsz=256):
+    """LaMa on a crop around the hole (full-frame img in [0,1]); returns img with hole filled."""
+    ys, xs = np.nonzero(hole)
+    if len(ys) == 0: return img
+    Hh, Ww = hole.shape
+    cy0, cy1 = max(0, ys.min()-margin), min(Hh, ys.max()+1+margin)
+    cx0, cx1 = max(0, xs.min()-margin), min(Ww, xs.max()+1+margin)
+    if cy1-cy0 < minsz: c = (cy0+cy1)//2; cy0, cy1 = max(0, c-minsz//2), min(Hh, max(0, c-minsz//2)+minsz)
+    if cx1-cx0 < minsz: c = (cx0+cx1)//2; cx0, cx1 = max(0, c-minsz//2), min(Ww, max(0, c-minsz//2)+minsz)
+    sub = img[cy0:cy1, cx0:cx1]; hm = hole[cy0:cy1, cx0:cx1]
+    h, w = hm.shape; H8, W8 = -(-h//8)*8, -(-w//8)*8
+    im = np.pad(np.transpose(sub, (2, 0, 1)), ((0, 0), (0, H8-h), (0, W8-w)), mode='symmetric')
+    mk = np.pad(hm.astype(np.float32)[None], ((0, 0), (0, H8-h), (0, W8-w)), mode='symmetric')
+    o = lama(torch.from_numpy(im)[None].float(), torch.from_numpy(mk)[None])[0, :, :h, :w].clamp(0, 1).permute(1, 2, 0).numpy()
+    out = img.copy(); out[cy0:cy1, cx0:cx1][hm] = o[hm]
+    return out
 
 t0 = time.time(); kfs = []
 kd = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (5, 5))
-for rnd in range(MAXR + 1):
+def apply_kf(t, P, U):
+    img = frames8[t].astype(np.float32) / 255
+    img[y0:y1] = P[t]
+    hole = np.zeros((PH, PW), bool)
+    hole[y0:y1] = (cv2.dilate(U[t].astype(np.uint8), kd) > 0) & mb[t]
+    out = lama_fill(img, hole)
+    hb_ = hole[y0:y1]
+    newv = np.where(mb[t][..., None], P[t], vals[t])
+    newv[hb_] = out[y0:y1][hb_]
+    vals[t] = newv; known[t] = True
+
+MAXB = int(sys.argv[5]) if len(sys.argv) > 5 else 12
+phase = 'interior'
+for rnd in range(MAXR + MAXB + 1):
     P, U = propagate()
     areas = U.reshape(N, -1).sum(1)
-    inter = np.array([interior_area(U[t]) if areas[t] > THR else 0 for t in range(N)])
-    print(f'round {rnd}: prop done {time.time()-t0:.0f}s, frames with holes>{THR}: {(areas > THR).sum()}, interior>{THR}: {(inter > THR).sum()}, total unfilled px {areas.sum()}', flush=True)
-    if rnd == MAXR or (inter > THR).sum() < 8: break
-    score = inter * (inter > THR)
+    if phase == 'interior':
+        inter = np.array([interior_area(U[t]) if areas[t] > THR else 0 for t in range(N)])
+        print(f'round {rnd} [{phase}]: {time.time()-t0:.0f}s, frames with holes: {(areas > 0).sum()}, >{THR}: {(areas > THR).sum()}, interior>{THR}: {(inter > THR).sum()}, total px {areas.sum()}', flush=True)
+        if rnd >= MAXR or (inter > THR).sum() < 8:
+            phase = 'border'
+        else:
+            score = inter * (inter > THR)
+    if phase == 'border':
+        print(f'round {rnd} [{phase}]: {time.time()-t0:.0f}s, frames with holes: {(areas > 0).sum()}, >50: {(areas > 50).sum()}, total px {areas.sum()}', flush=True)
+        if (areas > 50).sum() == 0 or rnd >= MAXR + MAXB: break
+        score = areas * (areas > 50)
     picks = []
     for t in np.argsort(-score):
         if score[t] <= 0: break
         if all(abs(int(t) - p) >= GAP for p in picks): picks.append(int(t))
     for t in picks:
-        img = frames8[t].astype(np.float32) / 255
-        img[y0:y1] = P[t]
-        hole = np.zeros((PH, PW), bool)
-        hole[y0:y1] = (cv2.dilate(U[t].astype(np.uint8), kd) > 0) & mb[t]
-        out = lama_fill(img, hole)
-        band = out[y0:y1]
-        hb_ = hole[y0:y1]
-        newv = np.where(mb[t][..., None], P[t], vals[t])
-        newv[hb_] = band[hb_]
-        vals[t] = newv; known[t] = True
-        kfs.append((rnd, t, int(U[t].sum())))
-    print(f'  round {rnd}: lama on {len(picks)} keyframes {picks[:12]}... {time.time()-t0:.0f}s', flush=True)
+        apply_kf(t, P, U); kfs.append((rnd, t, int(U[t].sum())))
+    print(f'  lama on {len(picks)} keyframes {picks[:10]}... {time.time()-t0:.0f}s', flush=True)
+# final cleanup: any remaining holes, per frame (no re-propagation)
+rem = [t for t in range(N) if U[t].any()]
+for t in rem:
+    img = frames8[t].astype(np.float32) / 255; img[y0:y1] = P[t]
+    hole = np.zeros((PH, PW), bool); hole[y0:y1] = (cv2.dilate(U[t].astype(np.uint8), kd) > 0) & mb[t]
+    P[t] = lama_fill(img, hole)[y0:y1]; U[t] = False
+print(f'final per-frame cleanup on {len(rem)} frames, {time.time()-t0:.0f}s', flush=True)
 np.save(f'{WORK}/{v}_gprop.npy', np.clip(P*255+0.5, 0, 255).astype(np.uint8))
 np.save(f'{WORK}/{v}_gprop_U.npy', U)
 json.dump(kfs, open(f'{WORK}/{v}_gprop_kf.json', 'w'))

@@ -1,3 +1,1 @@
-{"drop": [14,62,72,88,106,57,63,74,92,93,68,43],
- "min_track_conf": 0.2, "dil": 8,
- "shadow": {"on": true, "track": true, "track_len": 40}}
+{"drop": [14, 62, 72, 88, 106, 57, 63, 74, 92, 93, 68, 43], "min_track_conf": 0.2, "dil": 8, "shadow": {"on": true, "track": true, "track_len": 40}, "reflect": [236, 10000, 0.4]}

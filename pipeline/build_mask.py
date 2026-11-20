@@ -91,6 +91,18 @@ if __name__ == '__main__':
         fl_prev = dis_flow(dis, cur, np.asarray(fr[f-1])) if f > 0 else None
         if f > 0 and masks[f-1].any(): m |= warp_full(masks[f-1], fl_prev)
         if f < n-1 and masks[f+1].any(): m |= warp_full(masks[f+1], dis_flow(dis, cur, np.asarray(fr[f+1])))
+        rf = cfg.get('reflect')
+        if rf and rf[0] <= f < rf[1]:
+            pm = masks[f]
+            for (bx1, by1, bx2, by2) in boxes[f]:
+                bh = by2 - by1
+                if bh < 150 or by2 >= H - 4: continue
+                L_ = int(rf[2] * bh)
+                X0, X1 = max(0, bx1 - 10), min(W, bx2 + 10)
+                n_ = min(L_, by2 - by1, H - by2)
+                if n_ <= 0: continue
+                src = pm[by2 - n_:by2, X0:X1][::-1]
+                m[by2:by2 + n_, X0:X1] |= src
         sh = np.zeros((H, W), bool)
         if sc.get('on', True) and sc.get('f0', 0) <= f < sc.get('f1', 10**6):
             da = sc.get('dark_attach', [0, 0, 0])
