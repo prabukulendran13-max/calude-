@@ -20,9 +20,23 @@ if os.environ.get('FIX'):
     G0 = np.load(f'{WORK}/{v}_gprop.npy')
     bad = np.load(f'{WORK}/{v}_bad.npy')
     vals = G0.astype(np.float32) / 255
-    known = ~bad
     print('FIX mode: bad px', int(bad.sum()), 'frames', int(bad.any(axis=(1, 2)).sum()), flush=True)
 gx, gy = np.meshgrid(np.arange(PW, dtype=np.float32), np.arange(hb, dtype=np.float32))
+if os.environ.get('FIX'):
+    # extend flagged regions along the motion (+-K frames), restricted to the fill region, so ghost spans are cleared whole
+    K = int(os.environ.get('FIXK', '20'))
+    E = bad.copy()
+    for k in range(K):
+        En = E.copy()
+        for t in range(N):
+            if t + 1 < N and E[t+1].any():
+                En[t] |= cv2.remap(E[t+1].astype(np.uint8), gx + FF[t][..., 0], gy + FF[t][..., 1], cv2.INTER_NEAREST) > 0
+            if t - 1 >= 0 and E[t-1].any():
+                En[t] |= cv2.remap(E[t-1].astype(np.uint8), gx + FB[t-1][..., 0], gy + FB[t-1][..., 1], cv2.INTER_NEAREST) > 0
+        E = En & mb
+    E = np.stack([cv2.dilate(e.astype(np.uint8), np.ones((5, 5), np.uint8)) > 0 for e in E]) & mb
+    known = ~E
+    print('FIX expanded: px', int(E.sum()), 'frames', int(E.any(axis=(1, 2)).sum()), flush=True)
 lama = torch.jit.load('/tmp/claude-0/-home-user-calude-/c996a4b3-e028-50ae-a262-aa818c3654dc/scratchpad/models/big-lama.pt', map_location='cpu').eval()
 
 def step(prev, pmiss, cur, cmiss, fp, fc):

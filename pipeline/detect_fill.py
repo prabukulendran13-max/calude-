@@ -15,7 +15,7 @@ k = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (13, 13))
 for t in range(N):
     if frames_sel is not None and t not in frames_sel: continue
     img = frames8[t].copy(); img[y0:y1] = G[t]
-    r = m.predict(np.ascontiguousarray(img[..., ::-1]), imgsz=1152, conf=0.12, classes=[0], retina_masks=True, verbose=False)[0]
+    r = m.predict(np.ascontiguousarray(img[..., ::-1]), imgsz=int(__import__('os').environ.get('DIMG', '1152')), conf=float(__import__('os').environ.get('DCONF', '0.12')), classes=[0], retina_masks=True, verbose=False)[0]
     if r.masks is None: continue
     md = r.masks.data.numpy() > 0.5
     fill = masks[t]
@@ -28,6 +28,6 @@ for t in range(N):
             bad[t] |= g[y0:y1]
             report.append((t, round(float(r.boxes.conf[j]), 2), round(float(ov), 2), int(dm.sum())))
     if t % 50 == 0: print(v, t, len(report), flush=True)
-np.save(f'{WORK}/{v}_bad.npy', bad)
-json.dump(report, open(f'{WORK}/{v}_bad.json', 'w'))
+np.save(f'{WORK}/{v}_bad.npy', bad) if not __import__('os').environ.get('BADOUT') else np.save(__import__('os').environ['BADOUT'], bad)
+json.dump(report, open(f'{WORK}/{v}_bad.json' if not __import__('os').environ.get('BADOUT') else __import__('os').environ['BADOUT'] + '.json', 'w'))
 print('done', v, 'flagged frames', len(set(r[0] for r in report)), 'dets', len(report))
