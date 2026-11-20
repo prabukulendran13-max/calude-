@@ -15,6 +15,13 @@ FB = np.ascontiguousarray(np.moveaxis(np.asarray(cf[1]), 1, -1)).astype(np.float
 mb = masks[:, y0:y1]
 vals = frames8[:, y0:y1].astype(np.float32) / 255
 known = ~mb
+import os
+if os.environ.get('FIX'):
+    G0 = np.load(f'{WORK}/{v}_gprop.npy')
+    bad = np.load(f'{WORK}/{v}_bad.npy')
+    vals = G0.astype(np.float32) / 255
+    known = ~bad
+    print('FIX mode: bad px', int(bad.sum()), 'frames', int(bad.any(axis=(1, 2)).sum()), flush=True)
 gx, gy = np.meshgrid(np.arange(PW, dtype=np.float32), np.arange(hb, dtype=np.float32))
 lama = torch.jit.load('/tmp/claude-0/-home-user-calude-/c996a4b3-e028-50ae-a262-aa818c3654dc/scratchpad/models/big-lama.pt', map_location='cpu').eval()
 

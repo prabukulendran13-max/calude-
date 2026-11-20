@@ -77,6 +77,10 @@ if __name__ == '__main__':
     masks, boxes = person_masks(v, set(cfg.get('drop', [])), cfg.get('min_track_conf', 0.35))
     fr = np.load(f'{WORK}/in/{v}_rgb8.npy', mmap_mode='r')
     n = len(masks)
+    import os as _os
+    if _os.path.exists(f'{WORK}/{v}_extra.npy'):
+        ex = np.load(f'{WORK}/{v}_extra.npy')
+        for f in range(n): masks[f] |= np.unpackbits(ex[f], axis=-1)[:, :W] > 0
     for f, poly in cfg.get('extra_polys', []):   # manual additions [frame, [[x,y],...]]
         cv2.fillPoly(masks[f].view(np.uint8), [np.array(poly, np.int32)], 1)
     dis = cv2.DISOpticalFlow_create(cv2.DISOPTICAL_FLOW_PRESET_MEDIUM)
