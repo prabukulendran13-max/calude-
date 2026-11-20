@@ -13,6 +13,12 @@ cf = np.load(f'{WORK}/{v}_cflow.npy', mmap_mode='r')
 FF = np.ascontiguousarray(np.moveaxis(np.asarray(cf[0]), 1, -1)).astype(np.float32)  # (N-1, hb, PW, 2) t->t+1
 FB = np.ascontiguousarray(np.moveaxis(np.asarray(cf[1]), 1, -1)).astype(np.float32)  # t+1->t
 mb = masks[:, y0:y1]
+import os as _os
+_D = int(_os.environ.get('SRCDIL', '0'))
+if _D > 0:
+    _k = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (2*_D+1, 2*_D+1))
+    mb = np.stack([cv2.dilate(m.astype(np.uint8), _k) > 0 for m in mb])
+    print('SRCDIL', _D, flush=True)
 vals = frames8[:, y0:y1].astype(np.float32) / 255
 known = ~mb
 import os
@@ -35,6 +41,16 @@ if os.environ.get('FIX'):
                 En[t] |= cv2.remap(E[t-1].astype(np.uint8), gx + FB[t-1][..., 0], gy + FB[t-1][..., 1], cv2.INTER_NEAREST) > 0
         E = En & mb
     E = np.stack([cv2.dilate(e.astype(np.uint8), np.ones((5, 5), np.uint8)) > 0 for e in E]) & mb
+    # optionally clear whole mask components that touch flagged regions (removes complete ghost silhouettes)
+    if os.environ.get('FIXCOMP'):
+        for t in range(N):
+            if not E[t].any(): continue
+            n_, lab = cv2.connectedComponents(mb[t].astype(np.uint8), connectivity=8)
+            ids = np.unique(lab[E[t] & (lab > 0)])
+            comp = np.isin(lab, ids)
+            # limit to a generous neighbourhood of the flagged area so big merged masks are not wiped entirely
+            near = cv2.dilate(E[t].astype(np.uint8), cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (61, 61))) > 0
+            E[t] |= comp & near
     known = ~E
     print('FIX expanded: px', int(E.sum()), 'frames', int(E.any(axis=(1, 2)).sum()), flush=True)
 lama = torch.jit.load('/tmp/claude-0/-home-user-calude-/c996a4b3-e028-50ae-a262-aa818c3654dc/scratchpad/models/big-lama.pt', map_location='cpu').eval()
