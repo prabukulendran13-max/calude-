@@ -1,14 +1,14 @@
 {
   "name": "Carrom Duel",
   "short_name": "Carrom Duel",
-  "description": "Carrom against the computer. Works offline.",
+  "description": "Carrom vs the bot. Pot 'em all. Works offline.",
   "id": "./",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",
   "orientation": "portrait",
-  "background_color": "#06200f",
-  "theme_color": "#06200f",
+  "background_color": "#1a1fa3",
+  "theme_color": "#1a1fa3",
   "categories": ["games"],
   "icons": [
     { "src": "app/icon-192.png", "sizes": "192x192", "type": "image/png" },

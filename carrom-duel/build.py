@@ -16,7 +16,7 @@ assert 'fonts.googleapis' not in head, 'font link not removed'
 
 APP_HEAD = '''<meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
-<meta name="description" content="Carrom against the computer. Works offline.">
+<meta name="description" content="Carrom vs the bot. Pot 'em all. Works offline.">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -25,7 +25,7 @@ APP_HEAD = '''<meta charset="utf-8">
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="apple-touch-icon" href="app/icon-180.png">
 <link rel="icon" type="image/png" sizes="32x32" href="app/icon-32.png">
-<style>@font-face{font-family:"Baloo 2";font-style:normal;font-weight:400 800;font-display:swap;src:url(app/baloo2-latin.woff2) format("woff2")}</style>
+<style>@font-face{font-family:"Baloo 2";font-style:normal;font-weight:400 800;font-display:swap;src:url(app/baloo2-latin.woff2) format("woff2")}@font-face{font-family:"Lilita One";font-style:normal;font-weight:400;font-display:swap;src:url(app/lilita-one-latin.woff2) format("woff2")}</style>
 '''
 REGISTER = '''<script>
 if('serviceWorker' in navigator&&/^https?:$/.test(location.protocol))addEventListener('load',()=>navigator.serviceWorker.register('sw.js').catch(()=>{}));
@@ -35,7 +35,7 @@ if('serviceWorker' in navigator&&/^https?:$/.test(location.protocol))addEventLis
     f'<!doctype html>\n<html lang="en">\n<head>\n{APP_HEAD}{head.strip()}\n</head>\n<body>\n'
     f'<div id="app">{body.rstrip()}\n{REGISTER}</body>\n</html>\n')
 
-ASSETS = ['index.html', 'manifest.webmanifest', 'app/baloo2-latin.woff2', 'app/icon-32.png',
+ASSETS = ['index.html', 'manifest.webmanifest', 'app/baloo2-latin.woff2', 'app/lilita-one-latin.woff2', 'app/icon-32.png',
           'app/icon-180.png', 'app/icon-192.png', 'app/icon-512.png', 'app/icon-maskable-512.png']
 digest = hashlib.sha256()
 for a in ASSETS:
