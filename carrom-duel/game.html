@@ -15,7 +15,7 @@
 *{box-sizing:border-box;min-width:0}
 [hidden]{display:none!important}
 html,body{height:100%}
-body{margin:0;background:var(--bg2);color:var(--ink);font:16px/1.4 "Baloo 2",ui-rounded,"Arial Rounded MT Bold","Segoe UI",system-ui,sans-serif;overflow:hidden;-webkit-tap-highlight-color:transparent;-webkit-user-select:none;user-select:none;touch-action:manipulation}
+body{margin:0;background:var(--bg2);color:var(--ink);font:16px/1.4 "Baloo 2",ui-rounded,"Arial Rounded MT Bold","Segoe UI",system-ui,sans-serif;overflow:hidden;-webkit-tap-highlight-color:transparent;-webkit-user-select:none;user-select:none;touch-action:manipulation;overscroll-behavior:none;-webkit-touch-callout:none}
 body::before{content:"";position:fixed;inset:0;z-index:-2;background:radial-gradient(110% 75% at 50% 42%,#1a5a42 0%,var(--bg) 48%,var(--bg2) 100%)}
 body::after{content:"";position:fixed;inset:0;z-index:-1;pointer-events:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='64' height='64' viewBox='0 0 64 64'%3E%3Cg fill='none' stroke='%23fff6e3' stroke-opacity='.055' stroke-width='1.4'%3E%3Cpath d='M32 6C44 18 44 46 32 58C20 46 20 18 32 6Z'/%3E%3Cpath d='M6 32C18 20 46 20 58 32C46 44 18 44 6 32Z'/%3E%3Ccircle cx='32' cy='32' r='6'/%3E%3Cpath d='M0 0L10 10M64 0L54 10M0 64L10 54M64 64L54 54'/%3E%3C/g%3E%3C/svg%3E")}
 #app{position:relative;height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;padding-top:max(10px,env(safe-area-inset-top,0px));padding-bottom:max(12px,env(safe-area-inset-bottom,0px));padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
@@ -669,6 +669,7 @@ function beginGame(){
   settings.mode=G.mode;settings.level=G.level;store('settings',settings);
   $('menu').hidden=$('pause').hidden=$('over').hidden=true;
   G.phase='wait';
+  wake(true);
   startTurn();
 }
 function startTurn(){
@@ -727,6 +728,7 @@ function cpuTurn(){
   setTimeout(pump,40);
 }
 function gameOver(){
+  wake(false);
   const w=G.winner,lv=G.level,r=record[lv]||(record[lv]={w:0,l:0,d:0});
   if(w===0)r.w++;else if(w===1)r.l++;else r.d++;store('record',record);
   $('overTitle').textContent=w===0?'You win!':w===1?'The computer wins':'A draw';
@@ -958,6 +960,7 @@ function renderMenu(){
   if(!$('btnResume').hidden)$('btnResume').textContent=`Resume last game (${MODES[s.mode].name}, ${LEVELS[s.level].name})`;
 }
 function showMenu(){
+  wake(false);
   epoch++;paused=false;aim=drag=cpu=null;
   if(!G||G.phase!=='menu'){G=freshG(settings.mode,settings.level,0);ST.y=baseY(0);ST.x=S/2}
   $('pause').hidden=$('over').hidden=true;$('menu').hidden=false;renderMenu();hud();placeKnob();
@@ -981,6 +984,20 @@ $('tgDeflect').addEventListener('click',()=>{settings.deflect=!settings.deflect;
 $('tgTimer').addEventListener('click',()=>{settings.timer=!settings.timer;if(G)G.tl=TURN;store('settings',settings);renderPause()});
 $('btnRematch').addEventListener('click',()=>{ensureAudio();newGame(G.mode,G.level,1-G.first)});
 $('btnMenu2').addEventListener('click',()=>{G=null;showMenu()});
+
+// ---------------- app behaviour: pause when the app is put away, keep the screen awake during a match ----------------
+let lock=null;
+const inGame=()=>!!G&&G.winner===null&&G.phase!=='menu'&&G.phase!=='over';
+async function wake(on){
+  try{
+    if(on&&!lock&&navigator.wakeLock&&document.visibilityState==='visible'){lock=await navigator.wakeLock.request('screen');lock.addEventListener('release',()=>{lock=null})}
+    else if(!on&&lock){const l=lock;lock=null;await l.release()}
+  }catch(e){lock=null}
+}
+document.addEventListener('visibilitychange',()=>{
+  if(document.visibilityState==='hidden'){if(inGame()&&!paused&&$('pause').hidden){paused=true;aim=drag=null;sdrag=null;renderPause();$('pause').hidden=false;hud()}}
+  else wake(inGame());
+});
 
 // ---------------- test hook: play the computer against itself without drawing ----------------
 window.__duel={
