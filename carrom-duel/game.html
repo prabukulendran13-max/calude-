@@ -160,7 +160,7 @@ details li{margin-bottom:6px}
       <details>
         <summary>How to play</summary>
         <ul>
-          <li>Slide your striker along your baseline with the bar under the board, or drag it on the board.</li>
+          <li>Slide your striker along your baseline with the bar under the board, or drag it on the board. If a puck is in the way, it hops to the nearest open spot.</li>
           <li>Pull back from the striker (or anywhere on the board) and let go to shoot. The arrow grows and turns red the harder you pull.</li>
           <li>Pot one of yours and you go again. Keep potting to stack up a combo.</li>
           <li>Pocket the striker and it's a foul: one of your pucks goes back to the middle.</li>
@@ -850,7 +850,17 @@ function placeKnob(){
   knobAt(sl0,G.turn===0&&G.phase!=='menu'?ST.x:G.sx[0]);
   knobAt(sl1,G.turn===1&&G.phase!=='menu'?ST.x:G.sx[1]);
 }
-function moveStriker(x){ST.x=clamp(x,BMIN,BMAX);placeKnob()}
+// Put the striker where asked, or, if a puck is in the way, on the nearest open spot (or the next one in the
+// direction of travel for key presses), so it never sits somewhere it can't be shot from.
+function moveStriker(x,dir){
+  x=clamp(x,BMIN,BMAX);
+  if(G&&!validAt(G.bodies,x,ST.y)){
+    let to=null;
+    if(dir)for(let t=x+dir;t>=BMIN&&t<=BMAX;t+=dir)if(validAt(G.bodies,t,ST.y)){to=t;break}
+    x=to??nearestValid(G.bodies,x,ST.y);
+  }
+  ST.x=x;placeKnob();
+}
 
 // ---------------- aiming helpers ----------------
 function cast(x,y,dx,dy,r,B){
@@ -1040,7 +1050,7 @@ sl0.addEventListener('pointerup',e=>{if(sdrag===e.pointerId)sdrag=null});
 sl0.addEventListener('pointercancel',()=>{sdrag=null});
 window.addEventListener('keydown',e=>{
   if(!canPlace()||aim)return;
-  if(e.key==='ArrowLeft'||e.key==='ArrowRight'){e.preventDefault();moveStriker(ST.x+(e.key==='ArrowLeft'?-1:1)*(e.shiftKey?12:2.5))}
+  if(e.key==='ArrowLeft'||e.key==='ArrowRight'){e.preventDefault();moveStriker(ST.x+(e.key==='ArrowLeft'?-1:1)*(e.shiftKey?12:2.5),e.key==='ArrowLeft'?-1:1)}
 });
 
 // ---------------- menus ----------------
@@ -1111,6 +1121,7 @@ window.__duel={
     return {winner:g.winner,shots,fouls,n,ok,trials,ms:Math.round(performance.now()-t0),planMs:Math.round(planMs),scores:g.scores,left:{w:onCount(g.bodies,'w'),b:onCount(g.bodies,'b'),q:onCount(g.bodies,'q')}};
   },
   state:()=>G,
+  striker:()=>({x:ST.x,y:ST.y}),
   shotTest(x,a,pw){const B=rack(),s=makeStriker(x,S-BOFF,a,pw,0);B.push(s);let n=0;const pots=[];const ev={pot:b=>pots.push(b.k)};const start=B.map(b=>[b.x,b.y]);
     for(;n<4000;n++){step(B,ev);if(!moving(B))break}
     return {secs:+(n*DT).toFixed(2),pots,moved:B.filter((b,i)=>b.k!=='s'&&Math.hypot(b.x-start[i][0],b.y-start[i][1])>2*PR).length,striker:[Math.round(s.x),Math.round(s.y)]}}
