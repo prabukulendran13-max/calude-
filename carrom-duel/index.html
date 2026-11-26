@@ -625,15 +625,19 @@ function drawBoard(g){
   const edge=(x0,y0,x1,y1,rx,ry,rw,rh)=>{const e=g.createLinearGradient(x0,y0,x1,y1);e.addColorStop(0,'rgba(0,0,0,.45)');e.addColorStop(1,'rgba(0,0,0,0)');g.fillStyle=e;g.fillRect(rx,ry,rw,rh)};
   edge(0,0,0,18,0,0,S,18);edge(0,S,0,S-18,0,S-18,S,18);edge(0,0,18,0,0,0,18,S);edge(S,0,S-18,0,S-18,0,18,S);
   // markings: soft cream lines that sit back behind the pieces; base circles in each side's colour
-  const INK='rgba(255,226,190,.42)',SIDE=['#ffd21f','#2ee6ff','#ff3d7f','#2ee6ff'];
+  const INK='rgba(255,226,190,.42)',SIDE=['#ffd21f','#2ee6ff','#ff3d7f','#2ee6ff'],TINT=['#ffe68a','#a3f4ff','#ffadcb','#a3f4ff'];
   g.strokeStyle=INK;g.lineWidth=2.6;g.lineCap='round';g.lineJoin='round';
   for(let r=0;r<4;r++){
     g.save();g.translate(S/2,S/2);g.rotate(r*Math.PI/2);g.translate(-S/2,-S/2);
     const yc=S-BOFF,y1=yc+BGAP,y2=yc-BGAP;
     g.beginPath();g.moveTo(BMIN,y1);g.lineTo(BMAX,y1);g.moveTo(BMIN,y2);g.lineTo(BMAX,y2);g.strokeStyle=INK;g.lineWidth=2.6;g.stroke();
     for(const x of [BMIN,BMAX]){
-      g.beginPath();g.arc(x,yc,BGAP,0,7);g.fillStyle=SIDE[r];g.globalAlpha=.8;g.fill();g.globalAlpha=1;g.strokeStyle=LINE;g.lineWidth=3;g.stroke();
-      g.beginPath();g.arc(x,yc,12,0,7);g.strokeStyle='rgba(20,12,58,.5)';g.lineWidth=2.2;g.stroke();
+      // flat painted marking: light, striped, no outline or shadow, so it never reads as a piece
+      g.save();g.beginPath();g.arc(x,yc,BGAP,0,7);g.fillStyle=TINT[r];g.globalAlpha=.16;g.fill();g.globalAlpha=1;g.clip();
+      g.strokeStyle=TINT[r];g.lineWidth=2.4;
+      for(let k=-4;k<=4;k++){g.beginPath();g.moveTo(x+k*8.5-BGAP,yc+BGAP);g.lineTo(x+k*8.5+BGAP,yc-BGAP);g.stroke()}
+      g.restore();
+      g.beginPath();g.arc(x,yc,BGAP-1.8,0,7);g.strokeStyle=SIDE[r];g.lineWidth=3.6;g.stroke();
     }
     g.strokeStyle=INK;g.lineWidth=2.6;
     const ux=Math.SQRT1_2,uy=-Math.SQRT1_2,ax=ux*112,ay=S+uy*112,bx=ux*335,by=S+uy*335;
@@ -718,7 +722,7 @@ function layout(){
 }
 
 // ---------------- game state ----------------
-let G=null,ST={x:S/2,y:S-BOFF},aim=null,drag=null,sdrag=null,cpu=null,shot=null,anims=[],floats=[],paused=false,epoch=0,acc=0,last=0;
+let glide=null,G=null,ST={x:S/2,y:S-BOFF},aim=null,drag=null,sdrag=null,cpu=null,shot=null,anims=[],floats=[],paused=false,epoch=0,acc=0,last=0;
 const emptyStats=()=>[{shots:0,pots:0,fouls:0},{shots:0,pots:0,fouls:0}];
 function freshG(mode,level,first){return {mode,level,bodies:rack(),turn:first,first,queen:{st:'board',by:-1},scores:[0,0],winner:null,shot:0,stats:emptyStats(),sx:[S/2,S/2],again:false,phase:'menu'}}
 function serial(){
@@ -736,7 +740,7 @@ function fromSave(s){
 function saveNow(){const s=serial();hotSave=s;store('save',s)}
 function newGame(mode,level,first){epoch++;G=freshG(mode,level,first);beginGame()}
 function beginGame(){
-  anims=[];floats=[];aim=drag=cpu=shot=null;paused=false;
+  anims=[];floats=[];aim=drag=cpu=shot=glide=null;paused=false;
   settings.mode=G.mode;settings.level=G.level;store('settings',settings);
   $('menu').hidden=$('pause').hidden=$('over').hidden=true;
   G.phase='wait';
@@ -752,7 +756,17 @@ function startTurn(){
   G.tl=TURN;
   if(!G.again)G.combo=0;
   if(G.shot===0&&!G.again)toast(MODES[G.mode].start,2600);
-  if(P===0)G.phase='place';
+  const f=G.retFrom;G.retFrom=null;
+  if(f&&!RM){
+    const d=Math.hypot(ST.x-f.x,ST.y-f.y);
+    glide={x0:f.x,y0:f.y,x1:ST.x,y1:ST.y,t0:performance.now(),d:clamp(260+d*.5,320,620),from:f.skin,to:P,pk:f.pk};
+    G.phase='return';placeKnob();hud();return;
+  }
+  beginPhase();
+}
+function beginPhase(){
+  glide=null;
+  if(G.turn===0)G.phase='place';
   else cpuTurn();
   placeKnob();hud();
 }
@@ -770,7 +784,8 @@ const LIVE={
 };
 function finishShot(){
   if(!G||G.phase!=='settle')return;
-  const P=G.turn;
+  const P=G.turn,sb=G.bodies.find(b=>b.k==='s');
+  G.retFrom=sb?(sb.on?{x:sb.x,y:sb.y,skin:P,pk:-1}:{x:POCKETS[sb.pk][0],y:POCKETS[sb.pk][1],skin:P,pk:sb.pk}):null;
   G.bodies=G.bodies.filter(b=>b.k!=='s');
   const pots=shot.pots.filter(b=>b.k!=='s'),before=G.scores.slice(),qBefore=G.queen.st;
   const res=resolve(G,pots,shot.foul);
@@ -966,6 +981,7 @@ function frame(t){
       G.tl-=dt;
       if(G.phase==='place'&&settings.timer&&G.tl<=0)timeUp();
     }
+    if(G.phase==='return'&&glide&&t-glide.t0>=glide.d){sfxHit(420,'piece');beginPhase()}
     if(G.phase==='moving'){
       acc+=dt;let n=0;
       while(acc>=DT&&n<60){step(G.bodies,LIVE);acc-=DT;n++;shot.steps++}
@@ -984,6 +1000,7 @@ function frame(t){
 function timeUp(){
   aim=drag=null;sdrag=null;
   callout('Too slow!','#ff3d7f',60);sfxFoul();
+  G.retFrom={x:ST.x,y:ST.y,skin:0,pk:-1};
   G.again=false;G.turn=1;G.shot++;G.phase='wait';hud();
   const ep=epoch;setTimeout(()=>{if(ep===epoch&&G.phase==='wait')startTurn()},800);
 }
@@ -1009,6 +1026,14 @@ function draw(t){
     drawSprite(b.k==='s'?SP['s'+b.p]:SP[b.k],b.x,b.y,sc,1);
   }
   anims=anims.filter(a=>{const e=(t-a.t0)/320;if(e>=1)return false;const ee=e*e;drawSprite(a.sp,a.x+(a.px-a.x)*ee,a.y+(a.py-a.y)*ee,1-.5*e,1-e*.9);return true});
+  if(G.phase==='wait'&&G.retFrom&&G.retFrom.pk<0)drawSprite(SP['s'+G.retFrom.skin],G.retFrom.x,G.retFrom.y,1,1);
+  if(G.phase==='return'&&glide){
+    // lifted off the board, eased home; swaps to the next player's striker on the way; rises out of a pocket
+    const e=clamp((t-glide.t0)/glide.d,0,1),k=e<.5?2*e*e:1-(-2*e+2)**2/2,lift=1+.14*Math.sin(Math.PI*e);
+    const x=glide.x0+(glide.x1-glide.x0)*k,y=glide.y0+(glide.y1-glide.y0)*k,sc=(glide.pk>=0?.5+.5*Math.min(1,e*1.8):1)*lift;
+    drawSprite(SP['s'+glide.to],x,y,sc,1);
+    if(glide.from!==glide.to&&k<1)drawSprite(SP['s'+glide.from],x,y,sc,1-k);
+  }
   if(['place','menu','cpuThink','cpuMove','cpuAim'].includes(G.phase)&&G.winner===null){
     const ok=validAt(G.bodies,ST.x,ST.y)||!anyValid(G.bodies,ST.y)||G.phase!=='place';
     const am=aimNow(),col=G.turn?'#ff3d7f':'#ffd21f';
