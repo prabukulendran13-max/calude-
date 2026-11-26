@@ -21,7 +21,7 @@ The app needs to be served from a web address once, so your phone can install it
    - iPhone: in **Safari**, tap **Share → Add to Home Screen**.
    - Android: in **Chrome**, tap **⋮ → Install app**.
 
-After that it opens from its icon, full screen, with or without a connection. When you're online it fetches updates quietly, and they show the next time you open it.
+After that it opens from its icon, full screen, with or without a connection. When you're online it always opens the newest version, and if an update lands while it's open it refreshes itself (between games) or offers a button (mid-match, which then carries on). The menu shows the version number.
 
 ## Files
 

@@ -113,6 +113,8 @@ details li{margin-bottom:6px}
 .stats .y{background:var(--you)}
 .stats .o{background:var(--bot)}
 .fx{position:fixed;inset:0;width:100%;height:100%;z-index:7;pointer-events:none}
+.ver{margin:14px 0 0;text-align:center;font-size:13px;color:var(--muted)}
+.upd{position:fixed;left:50%;top:calc(env(safe-area-inset-top,0px) + 8px);transform:translateX(-50%) rotate(-1.5deg);z-index:8;padding:10px 18px;border-radius:16px;border:3px solid var(--line);background:var(--lime);color:var(--line);font:400 18px "Lilita One","Baloo 2",system-ui,sans-serif;box-shadow:0 5px 0 var(--line);cursor:pointer;white-space:nowrap}
 @keyframes blink{50%{opacity:.25}}
 @keyframes throb{to{transform:scale(1.12)}}
 @keyframes pop{from{transform:scale(.8);opacity:0}}
@@ -157,6 +159,7 @@ details li{margin-bottom:6px}
       <div class="rec" id="recText"></div>
       <button class="btn go" id="btnPlay">Play</button>
       <button class="btn" id="btnResume" hidden>Resume</button>
+      <p class="ver" id="verText" hidden></p>
       <details>
         <summary>How to play</summary>
         <ul>
@@ -196,6 +199,7 @@ details li{margin-bottom:6px}
     </div>
   </div>
   <canvas class="fx" id="fx" aria-hidden="true"></canvas>
+  <button class="upd" id="updBar" hidden>New version ready · Tap to update</button>
 </div>
 
 <script>
@@ -1137,6 +1141,21 @@ document.addEventListener('visibilitychange',()=>{
   else wake(inGame());
 });
 
+// ---------------- app updates: the installed app picks up new versions on its own ----------------
+// The offline worker announces each version it activates. If that isn't the version on screen, refresh:
+// straight away between games, or from a button mid-match (the match resumes after the refresh).
+let updWaiting=false;
+function newVersion(){
+  if(updWaiting)return;updWaiting=true;
+  if(!inGame()){try{sessionStorage.setItem('cd.updated','1')}catch(e){}location.reload();return}
+  $('updBar').hidden=false;
+}
+$('updBar').addEventListener('click',()=>{saveNow();try{sessionStorage.setItem('cd.resume','1')}catch(e){}location.reload()});
+if(navigator.serviceWorker&&window.APP_BUILD&&/^https?:$/.test(location.protocol)){
+  navigator.serviceWorker.addEventListener('message',e=>{const d=e.data;if(d&&d.type==='carrom-duel-version'&&d.version!==window.APP_BUILD)newVersion()});
+  document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible')navigator.serviceWorker.getRegistration().then(r=>r&&r.update()).catch(()=>{})});
+}
+
 // ---------------- test hook: play the computer against itself without drawing ----------------
 window.__duel={
   selfPlay(mode='disc',la='medium',lb='medium',max=400){
@@ -1170,7 +1189,10 @@ function boot(data){
   if(data&&data.save)hotSave=data.save;
   layout();
   new ResizeObserver(()=>layout()).observe(app);
-  const resumed=fromSave(data&&data.save);
+  let auto=null,just=false;
+  try{if(sessionStorage.getItem('cd.resume')){sessionStorage.removeItem('cd.resume');auto=fromSave(load('save',null))}just=!!sessionStorage.getItem('cd.updated');sessionStorage.removeItem('cd.updated')}catch(e){}
+  if(window.APP_BUILD){const v=$('verText');v.hidden=false;v.textContent=just?`Updated to version ${window.APP_BUILD}`:`Version ${window.APP_BUILD} · updates itself when you're online`}
+  const resumed=fromSave(data&&data.save)||auto;
   if(resumed){G=resumed;beginGame()}else showMenu();
   requestAnimationFrame(frame);
 }
